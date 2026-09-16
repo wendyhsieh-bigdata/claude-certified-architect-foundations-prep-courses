@@ -14,6 +14,12 @@ python3 -m http.server 8000 -d site
 
 不需要安裝任何套件，Python 3.10 以上即可。
 
+## GitHub Pages
+
+`.github/workflows/pages.yml` 會在 push 到 `main` 時重新執行 `build/parse.py`，把 `site/` 部署到
+https://wendyhsieh-bigdata.github.io/claude-certified-architect-foundations-prep-courses/ 。
+第一次部署若失敗，到 repo 的 Settings → Pages 把 Source 設為 **GitHub Actions** 後重跑即可。
+
 ## 檔案
 
 | 路徑 | 角色 |
