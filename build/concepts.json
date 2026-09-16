@@ -1,0 +1,296 @@
+{
+  "paths": [
+    {
+      "id": "general",
+      "title": "非技術軌",
+      "desc": "不寫程式也能完整走完。先建立與 AI 協作的思考框架，再學 claude.ai 的功能地圖。",
+      "steps": [
+        {"course": "ai-fluency", "note": "先學 4D Framework 與三種協作模式，之後所有課程的 prompt 觀念都從這裡來。"},
+        {"course": "claude-101", "note": "掌握 Projects / Skills / Connectors / Research 各解決什麼問題，以及三組最容易搞混的對照。"}
+      ]
+    },
+    {
+      "id": "dev",
+      "title": "開發者軌",
+      "desc": "三份雲平台課程其實是同一門課的三個版本，建議用「核心合併視圖」一次學完，再用差異表補平台細節。",
+      "steps": [
+        {"course": "ai-fluency", "note": "快速過一遍即可，重點是 Description / Discernment 循環。"},
+        {"course": "core", "note": "核心合併視圖：模型選型 → API → eval → prompt engineering → tool use → RAG → 進階功能 → MCP → Claude Code → agents。三平台共通內容只讀一次。"},
+        {"course": "mcp", "note": "把核心課第 8 單元展開成完整實作：FastMCP、Inspector、resources、prompts。"},
+        {"course": "claude-code", "note": "從「會用 Claude Code」進到「設計讓它自己把事做對的系統」：permission modes、hooks、routines、plugins。"}
+      ]
+    }
+  ],
+  "platforms": {
+    "api": {"label": "Anthropic API", "course": "claude-api"},
+    "bedrock": {"label": "Amazon Bedrock", "course": "bedrock"},
+    "vertex": {"label": "Vertex AI", "course": "vertex"}
+  },
+  "core_topics": [
+    {
+      "id": "models",
+      "n": 1,
+      "title": "模型家族與選型",
+      "one_line": "三個家族核心能力相同，差別只在為什麼而優化：智力（Opus）、平衡（Sonnet）、速度成本（Haiku）。",
+      "common": [
+        "Opus：最高智力，支援 reasoning，能獨立跑數小時的多步驟任務；延遲高、最貴。",
+        "Sonnet：智力、速度、成本的平衡點，擅長寫程式；大多數應用的預設選擇，課程示範幾乎都用它。",
+        "Haiku：最快最便宜，不支援 reasoning；適合即時互動與高流量介面。",
+        "實務上混用：Haiku 顧使用者介面、Sonnet 跑主要邏輯、Opus 留給真正需要深度推理的任務。",
+        "原則：依任務選型，不是一律用最強的模型。"
+      ],
+      "units": {"claude-api": [0], "bedrock": [0], "vertex": [0]},
+      "diffs": [
+        {"aspect": "模型表內容", "api": "Opus / Sonnet / Haiku 三列", "bedrock": "多一列 Claude Fable 5（Opus 之上的新層級，model ID <code>anthropic.claude-fable-5</code>），只留給 Opus 也扛不住的最難任務", "vertex": "Opus / Sonnet / Haiku 三列"},
+        {"aspect": "課程示範模型", "api": "<code>claude-sonnet-4-0</code>", "bedrock": "Sonnet（透過 inference profile ID 指定）", "vertex": "<code>claude-sonnet-4@20250514</code>"}
+      ]
+    },
+    {
+      "id": "api",
+      "n": 2,
+      "title": "存取 API：request、多輪對話、輸出控制",
+      "one_line": "API 是 stateless 的，對話歷史要自己帶；prefill 加 stop sequence 是取得乾淨結構化輸出的招牌技巧。",
+      "common": [
+        "Request 生命週期：client → 你的 server → 模型平台 → 回 server → 回 client。永遠不要從前端直接呼叫，因為需要秘密憑證。",
+        "模型內部四階段：tokenization → embedding → contextualization → generation。",
+        "多輪對話：API 完全不記得上一輪，必須自己維護完整 messages list 每次送回；角色 user / assistant 嚴格交替。課程用三個 helper 貫穿：add_user_message、add_assistant_message、chat。",
+        "max_tokens 是安全上限不是目標長度。",
+        "System prompt 給角色與行為準則，不動使用者提問就能大幅改變回應。",
+        "Temperature 0 到 1：0.0–0.3 事實與程式碼、0.4–0.7 摘要教學、0.8–1.0 創意。高溫不保證每次不同。",
+        "Streaming 讓文字邊生成邊顯示，避免使用者等 10–30 秒。",
+        "Prefill：在 messages 尾端放一則你寫好開頭的 assistant 訊息，Claude 接著寫。Stop sequences：生成到指定字串立即停止，且該字串不出現在輸出。",
+        "兩招合體取乾淨 JSON：prefill <code>```json</code>，stop sequence <code>```</code>。prefill 也可以是一整句引導語。"
+      ],
+      "units": {"claude-api": [1], "bedrock": [1], "vertex": [1]},
+      "diffs": [
+        {"aspect": "SDK / client", "api": "<code>from anthropic import Anthropic</code>；<code>client = Anthropic()</code>", "bedrock": "<code>boto3.client(\"bedrock-runtime\", region_name=...)</code>", "vertex": "<code>pip install \"anthropic[vertex]\"</code>；<code>AnthropicVertex(region=\"global\", project_id=...)</code>"},
+        {"aspect": "認證與前置設定", "api": "API key 放 <code>.env</code>，加進 <code>.gitignore</code>", "bedrock": "AWS credentials；model 不是每個 region 都有，用 inference profile ID（到 Cross-region inference 區找，不是模型目錄頁的 model ID）", "vertex": "Model Garden 搜 Anthropic 按 Enable；<code>gcloud auth application-default login</code>"},
+        {"aspect": "呼叫方法", "api": "<code>client.messages.create(model, max_tokens, messages)</code>", "bedrock": "<code>client.converse(modelId, messages)</code>（Converse API）；底層另有 <code>invoke_model</code> 傳原始 JSON body", "vertex": "<code>client.messages.create(...)</code>，與 API 相同"},
+        {"aspect": "user message 格式", "api": "<code>{\"role\": \"user\", \"content\": \"...\"}</code>", "bedrock": "<code>content</code> 必須是 list：<code>[{\"text\": \"...\"}]</code>", "vertex": "與 API 相同"},
+        {"aspect": "取出回應文字", "api": "<code>message.content[0].text</code>", "bedrock": "<code>response[\"output\"][\"message\"][\"content\"][0][\"text\"]</code>", "vertex": "與 API 相同"},
+        {"aspect": "system prompt", "api": "<code>system=\"...\"</code> 參數", "bedrock": "<code>system=[{\"text\": \"...\"}]</code>；不能是空字串", "vertex": "與 API 相同"},
+        {"aspect": "temperature", "api": "直接傳 <code>temperature</code>", "bedrock": "放進 <code>inferenceConfig</code>；預設 1.0", "vertex": "與 API 相同"},
+        {"aspect": "streaming", "api": "<code>client.messages.stream(...)</code> 搭配 <code>stream.text_stream</code>；結束後 <code>get_final_message()</code>", "bedrock": "<code>client.converse_stream(...)</code>；純文字只看 <code>contentBlockDelta</code> 事件", "vertex": "與 API 相同"}
+      ]
+    },
+    {
+      "id": "eval",
+      "n": 3,
+      "title": "Prompt evaluation：先量測再改進",
+      "one_line": "講師視為全課最重要的單元：不能量測，就不知道改進是否真的有效。",
+      "common": [
+        "寫完 prompt 的三條路：測一次就上線（會炸）、手測幾次修補（還是會炸）、跑 eval pipeline 拿客觀分數再迭代。",
+        "五步驟：草擬 prompt → 建立 eval dataset（可用 Haiku 生成，prefill 加 stop sequence 拿 JSON）→ 逐筆餵給 Claude → grader 打 1–10 分取平均 → 改 prompt 重跑比分數。",
+        "三種 grader：code grader 驗長度、格式、語法（json.loads / ast.parse / re.compile）；model grader 評品質與指令遵循；human grader 最靈活最慢。",
+        "Model grader 要同時要求 strengths、weaknesses、reasoning，否則傾向給無意義的 6 分左右。",
+        "生成測資時順便產生 solution_criteria，插進 grader prompt 讓評分理由更扎實。",
+        "單一分數本身意義不大，價值在於迭代之間的比較。"
+      ],
+      "units": {"claude-api": [2], "bedrock": [2], "vertex": [2]},
+      "diffs": [
+        {"aspect": "程式結構", "api": "五步驟 pipeline，dataset.json", "bedrock": "三個函式 run_prompt / run_test_case / run_eval；綜合分 = (model_score + syntax_score) / 2", "vertex": "與 API 相同，model 與 syntax 分數平均或加權"}
+      ]
+    },
+    {
+      "id": "prompt-eng",
+      "n": 4,
+      "title": "Prompt engineering：四招有分數佐證的技巧",
+      "one_line": "用運動員餐單例子示範，每招對 eval 分數的實際影響：2.32 → 3.92 → 7.86。",
+      "common": [
+        "清楚直接：prompt 第一行最重要，祈使句加動作動詞開頭（Write / Create / Generate）。",
+        "具體明確：output quality guidelines（輸出該有的性質，幾乎每個 prompt 都該有）與 process steps（思考步驟，用在複雜問題）。",
+        "XML tags：prompt 混入大量資料時，用自訂標籤把「指令」和「資料」隔開，標籤名越具體越好。",
+        "給範例（one-shot / multi-shot）：治 corner case 與複雜輸出格式；從 eval 挑最高分輸出當範例，並解釋為什麼好。",
+        "除錯順序：先看 grader 的 reasoning 報告再動手。綜合練習光第一招就從 2.8 拉到 9.5。"
+      ],
+      "units": {"claude-api": [3], "bedrock": [3], "vertex": [3]},
+      "diffs": [
+        {"aspect": "工具", "api": "report.html 看 grader reasoning", "bedrock": "PromptEvaluator class（支援併發、輸出 output.html）", "vertex": "與 API 相同"}
+      ]
+    },
+    {
+      "id": "tool-use",
+      "n": 5,
+      "title": "Tool use：讓 Claude 伸手碰外部世界",
+      "one_line": "四步循環是後面 MCP 與 agent 的地基：送 schema → Claude 要求工具 → 你執行並回傳結果 → Claude 生成回答。",
+      "common": [
+        "你準備兩樣東西：工具函式（驗證輸入、回傳有意義的錯誤）與 JSON Schema（name、description 3–4 句、input_schema）。Schema 可以請 Claude 幫你寫。",
+        "回應含 text block 與一或多個 tool use block；看 stop reason 是否為 tool_use 判斷是否要執行工具。",
+        "回傳結果時必須對上原本的 tool use id，並連同完整歷史與原本的 tools 參數一起送回。",
+        "while 迴圈骨架：呼叫 → append assistant → 若非 tool_use 就 break → 執行所有工具、append 結果 → 繼續。一個回應可能有多個工具請求。",
+        "用工具取結構化資料比 prefill 更可靠：定義一個 schema 等於目標結構的工具並強制呼叫，直接從參數取值。",
+        "Text editor tool：schema 內建，但檔案讀寫實作要自己寫。Web search tool：Anthropic 端全包，不用實作。"
+      ],
+      "units": {"claude-api": [4], "bedrock": [4], "vertex": [4]},
+      "diffs": [
+        {"aspect": "工具請求欄位", "api": "<code>tool_use</code> block；<code>stop_reason == \"tool_use\"</code>；<code>id</code>", "bedrock": "<code>toolUse</code> part；<code>stopReason</code>；<code>toolUseId</code>", "vertex": "與 API 相同"},
+        {"aspect": "回傳結果", "api": "<code>tool_result</code> block，<code>tool_use_id</code>，錯誤設 <code>is_error: True</code>", "bedrock": "<code>toolResult</code> part，<code>toolUseId</code>，<code>status</code> 為 success 或 error", "vertex": "與 API 相同"},
+        {"aspect": "強制使用工具", "api": "<code>tool_choice={\"type\": \"auto\" | \"any\" | \"tool\"}</code>", "bedrock": "<code>toolChoice: {\"auto\": {}} | {\"any\": {}} | {\"tool\": {\"name\": ...}}</code>", "vertex": "與 API 相同"},
+        {"aspect": "額外主題", "api": "fine-grained tool streaming（關掉 JSON 驗證）；web search 的 <code>max_uses</code> 與 <code>allowed_domains</code>", "bedrock": "batch tool 誘導平行呼叫；flexible to_json 萬用抽取工具；text editor ID 隨模型版本不同", "vertex": "batch tool；web search；text editor"}
+      ]
+    },
+    {
+      "id": "rag",
+      "n": 6,
+      "title": "RAG：大文件的正確打開方式",
+      "one_line": "預先切塊、查詢時只挑最相關的塊放進 prompt；語意搜尋加 BM25 混合檢索是 production 常態。",
+      "common": [
+        "全文塞進 prompt 的三個問題：長度上限、越長效果越差、又貴又慢。",
+        "Chunking：size-based 最保險（加 overlap）；structure-based 依標題切、格式一致時最乾淨；semantic-based 品質最高最貴。切壞會答錯題（醫學段落裡的「bug」）。",
+        "Embedding 是文字語意的數字化，語意相近則向量相近；Claude 本身不產生 embedding，要用專門模型。",
+        "六步流程：切塊 → 算 embedding → 存 vector database（原文一起存）→ 問題也算 embedding → cosine similarity 找最近的塊 → 組 prompt 給 Claude。",
+        "cosine similarity 接近 1 越像；cosine distance = 1 − similarity，接近 0 越像。",
+        "BM25 補語意搜尋的洞：對精確 ID 與代號可靠；罕見詞權重高。",
+        "Hybrid search 用 RRF 合併排名：score = Σ 1/(k + rank)，k 常取 60，只看名次不看分數。Retriever 統一 add_document / search 介面，可擴充。"
+      ],
+      "units": {"claude-api": [5], "bedrock": [5], "vertex": [5]},
+      "diffs": [
+        {"aspect": "Embedding 模型", "api": "VoyageAI <code>voyage-3-large</code>（另外註冊 API key）", "bedrock": "Amazon Titan <code>amazon.titan-embed-text-v2:0</code>，透過 <code>invoke_model</code> 呼叫", "vertex": "<code>text-embedding-005</code>，透過 google-genai SDK 的 <code>embed_content</code>"},
+        {"aspect": "Chunking 策略表", "api": "四種：多列 sentence-based", "bedrock": "三種", "vertex": "三種"},
+        {"aspect": "進階招式", "api": "BM25 加 multi-index RRF", "bedrock": "再加 reranking（只回傳 chunk ID）與 contextual retrieval（入庫前請 Claude 寫定位說明）", "vertex": "同 Bedrock：reranking 與 contextual retrieval"}
+      ]
+    },
+    {
+      "id": "features",
+      "n": 7,
+      "title": "進階功能：thinking、圖片、PDF、citations、caching",
+      "one_line": "Prompt caching 是最重要的成本槓桿，規則要記精確；extended thinking 是最後手段不是第一步。",
+      "common": [
+        "Extended thinking：先在草稿紙推理再作答；budget 最小 1024 tokens，max_tokens 要大於 budget；thinking tokens 要付費、延遲增加；thinking block 帶加密簽章不可竄改；redacted thinking 要能原樣放回。判斷：先優化 prompt 跑 eval，還不夠才開。",
+        "圖片：對圖片一樣要做 prompt engineering，給計數方法論或 one-shot 範例才會準；token 約 寬×高/750。實戰例子是衛星影像火險評估。",
+        "PDF：與圖片幾乎同一套程式碼，改用 document 型別；Claude 讀得到 PDF 裡的圖表與表格。",
+        "Citations：在 document 開啟 citations，回答附 cited_text、document_title、頁碼；把 Claude 從黑盒子變成會標出處的研究助理。",
+        "Prompt caching：不會自動開，要手動放斷點；斷點前內容一字不差才命中；合計至少 1024 tokens；最佳對象是很少變動的 tool schemas 與 system prompt；從 usage 欄位驗證寫入與讀取。"
+      ],
+      "units": {"claude-api": [6], "bedrock": [6], "vertex": [6]},
+      "diffs": [
+        {"aspect": "thinking 參數", "api": "<code>thinking={\"type\": \"enabled\", \"budget_tokens\": ...}</code>；與 prefill、temperature 不相容", "bedrock": "放在 <code>additional_model_fields[\"thinking\"]</code>；回應多一個 reasoning content part；被攔的思考變 <code>redactedContent</code>", "vertex": "與 API 相同；建議 budget 1024 配 max_tokens 4000 留餘裕"},
+        {"aspect": "圖片上限", "api": "單一 request 最多 100 張，每張 5MB", "bedrock": "最多 20 張，每張 3.75MB，長寬最大 8000px", "vertex": "最多 100 張，每張 5MB，單圖 8000px（多圖 2000px）"},
+        {"aspect": "PDF block", "api": "<code>type: \"document\"</code>，<code>media_type: \"application/pdf\"</code>", "bedrock": "<code>document: {format: \"pdf\", name: ..., source: {bytes}}</code>；多了 <code>name</code> 欄位", "vertex": "與 API 相同"},
+        {"aspect": "快取斷點寫法", "api": "<code>\"cache_control\": {\"type\": \"ephemeral\"}</code>；最多 4 個；順序 tools → system → messages", "bedrock": "<code>{\"cachePoint\": {\"type\": \"default\"}}</code> 附在列表最後", "vertex": "與 API 相同，必須用 longhand block 寫法"},
+        {"aspect": "快取存活時間（導讀所述）", "api": "1 小時", "bedrock": "5 分鐘", "vertex": "5 分鐘"},
+        {"aspect": "usage 欄位", "api": "<code>cache_creation_input_tokens</code> / <code>cache_read_input_tokens</code>", "bedrock": "<code>cacheWriteInputTokens</code> / <code>cacheReadInputTokens</code>", "vertex": "與 API 相同"},
+        {"aspect": "只有這裡有", "api": "Code execution（伺服器端工具，Docker container 無網路）加 Files API 上傳下載檔案", "bedrock": "—", "vertex": "—"}
+      ],
+      "note": "三份導讀對快取存活時間的說法不一致（API 寫 1 小時，另兩份寫 5 分鐘），以官方文件為準。"
+    },
+    {
+      "id": "mcp",
+      "n": 8,
+      "title": "MCP：把工具的定義與維護外包",
+      "one_line": "MCP 不是 tool use 的替代品；它解決「誰來寫和維護工具」。三個 primitives 用「誰控制」來記。",
+      "common": [
+        "MCP 是通訊協定層，把定義與執行工具的負擔從你的 server 移到 MCP server；你的應用程式跑 MCP client 連上去。",
+        "Transport agnostic：同機常用 stdio，也可走 HTTP、WebSockets。核心訊息兩對：ListTools 與 CallTool 的 Request / Result。",
+        "訊息流：提問 → client 向 server 要工具清單 → 連同問題送給 Claude → Claude 要求工具 → client 請 server 執行 → 結果回 Claude → 最終回答。",
+        "用 FastMCP 寫 server：decorator 加型別註記，JSON schema 自動生成；Inspector（mcp dev）不接完整應用就能測。",
+        "Tools 由 model 控制、Resources 由 app 控制（類似 HTTP GET，分 direct 與 templated URI）、Prompts 由 user 控制（按鈕、slash 指令）。",
+        "實務上通常只做一邊：發布 server 讓別人接，或做 client 接別人的 server。課程兩邊都做是為了教學。"
+      ],
+      "units": {"claude-api": [7], "bedrock": [7], "vertex": [7]},
+      "diffs": [
+        {"aspect": "平台特有", "api": "primitives 表附 Claude.ai 對應例子（工作流程按鈕、Add from Google Drive）", "bedrock": "MCP 工具 schema 與 Bedrock 格式略不同，專案用 <code>to_bedrock_tools</code> 轉換", "vertex": "—"}
+      ]
+    },
+    {
+      "id": "apps",
+      "n": 9,
+      "title": "Claude Code 與 Computer Use：agent 的活教材",
+      "one_line": "把 Anthropic 自己做出來的兩個 agent 當範本：/init 與 CLAUDE.md、先規劃再實作、worktree 平行、CI 自動修 bug。",
+      "common": [
+        "Claude Code 跑在終端機，本身就是 MCP client；用 <code>claude mcp add</code> 一行接上工具。",
+        "/init 掃描 codebase 產出 CLAUDE.md，之後每次對話自動帶入；三種範圍 project / local / user；# 開頭隨手補筆記。",
+        "兩套工作流：先餵 context → 要求先規劃不要寫 code → 確認後實作；或 TDD：先想測試 → 寫測試 → 寫通過測試的程式。",
+        "Claude Code 是效率放大器：給的脈絡與結構越多，結果越好。",
+        "Computer Use 就是 tool use：你送一段極簡 schema，背後展開成滑鼠、鍵盤、截圖的 action 函式；Claude 只發請求，由你的隔離環境執行。務必在 Docker 等隔離環境跑。"
+      ],
+      "units": {"claude-api": [8], "bedrock": [8], "vertex": [8]},
+      "diffs": [
+        {"aspect": "安裝與導向", "api": "<code>npm install -g @anthropic-ai/claude-code</code>，執行 <code>claude</code> 登入", "bedrock": "設三個環境變數把 Claude Code 從 Anthropic API 導向 Bedrock，外加 AWS credentials", "vertex": "同樣設三個環境變數指向 Vertex"},
+        {"aspect": "涵蓋範圍", "api": "Claude Code 實戰與熱門 MCP 整合（sentry、playwright、atlassian、slack）", "bedrock": "Claude Code、worktree 平行、custom slash commands、GitHub Action 撈 CloudWatch 自動修 bug、Computer Use QA、好 agent 的四個特質（合併成一個模組）", "vertex": "Claude Code、TDD 前先 /clear、worktree、custom slash commands、GitHub Action 自動修 bug、Computer Use QA"}
+      ]
+    },
+    {
+      "id": "agents",
+      "n": 10,
+      "title": "Agents vs Workflows：收尾的架構課",
+      "one_line": "能用 workflow 就用 workflow，真的必要才用 agent。使用者只在乎產品穩不穩。",
+      "common": [
+        "Workflow：預先設計好的一連串呼叫，你事先能畫出步驤時用；準確、可測、可預測，但不靈活。",
+        "Agent：給目標與工具讓 Claude 自己想辦法，無法預知任務時用；彈性極大，但完成率低、難測難監控。",
+        "四個 workflow patterns：Evaluator-Optimizer（產出 → 評分 → 帶回饋重做）、Parallelization（拆成平行子任務再彙整）、Chaining（依序小步驟，中間可插非 LLM 處理）、Routing（先分類再送專屬 pipeline）。",
+        "Agent 心法一：工具要抽象可組合，不要過度特化。Claude Code 只有 bash、read、write、edit、glob、grep 這類泛用工具。",
+        "Agent 心法二：Environment inspection。Claude 是盲的，每個動作後都要能觀察結果；永遠自問「Claude 怎麼知道這步有沒有成功？」"
+      ],
+      "units": {"claude-api": [9], "bedrock": [8], "vertex": [9]},
+      "diffs": [
+        {"aspect": "呈現方式", "api": "獨立單元，四個 workflow patterns 表加兩條 agent 心法", "bedrock": "沒有 workflow patterns 表；改以「好 agent 的四個特質」收尾：精簡工具組加迴圈、脈絡就是一切、高價值低錯誤成本任務、持續評測", "vertex": "與 API 相同"}
+      ]
+    },
+    {
+      "id": "wrap",
+      "n": 11,
+      "title": "總結與延伸",
+      "one_line": "最該帶走的一件事：prompt evaluation。eval 不必用大框架，課程用的評估工具大半是 Claude 自己寫的。",
+      "common": [
+        "手動測十次覺得沒問題不算數，production 使用者一定會打出你沒看過的結果。",
+        "prompt engineering 諸多技巧中最關鍵的仍是清楚直接。",
+        "延伸方向：agent orchestration、agent 評估與監控、agentic RAG、RAG evaluation、tool evaluation、LLM orchestration（Sonnet 指揮一群 Haiku）。"
+      ],
+      "units": {"claude-api": [10], "bedrock": [9], "vertex": [10]},
+      "diffs": []
+    }
+  ],
+  "cards": [
+    {"deck": "confuse", "q": "max_tokens 是「目標長度」還是「上限」？", "a": "上限。Claude 只寫它覺得該寫的量，碰到上限才被截斷。設 1000 不代表會寫滿。", "courses": ["claude-api", "vertex"]},
+    {"deck": "confuse", "q": "API 會記得上一輪對話嗎？", "a": "不會，API 是 stateless 的。要自己維護完整 messages list，每次 request 都把整段歷史送回；角色必須 user / assistant 嚴格交替。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "confuse", "q": "cosine similarity 與 cosine distance 哪個數字越小越像？", "a": "cosine distance。similarity 接近 1 越相似；distance = 1 − similarity，接近 0 越相似。看文件先確認用的是哪一個。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "confuse", "q": "MCP 是 tool use 的替代品嗎？", "a": "不是，兩者互補。tool use 是 Claude 呼叫工具的機制；MCP 解決的是「誰來寫、誰來維護這些工具」，執行流程完全一樣。", "courses": ["claude-api", "bedrock", "vertex", "mcp"]},
+    {"deck": "confuse", "q": "Text editor tool 與 Web search tool，哪個要自己實作？", "a": "Text editor：schema 內建在 Claude，但檔案的檢視、建立、取代、插入都要你自己寫。Web search：Anthropic 伺服器端全包，完全不用實作。", "courses": ["claude-api", "vertex"]},
+    {"deck": "confuse", "q": "Prompt caching 會自動開啟嗎？", "a": "不會。要手動在 block 放斷點，斷點之前的內容才被快取；命中條件是內容一字不差，多一個 please 就整段失效。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "confuse", "q": "Model grader 只要求它回傳分數就好？", "a": "不好。要同時要求 strengths、weaknesses、reasoning，否則模型評分會傾向給無意義的 6 分左右。再加 solution_criteria 會更扎實。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "confuse", "q": "取結構化資料：prefill 加 stop sequence，還是 tool-based 抽取？", "a": "prefill 加 stop sequence 設定成本低，適合快速原型；tool-based 抽取要寫完整 schema 但結構有保證，適合 production 的關鍵資料抽取。", "courses": ["bedrock", "vertex"]},
+    {"deck": "confuse", "q": "Extended thinking 什麼時候該開？", "a": "最後手段。先把 prompt 優化到底、跑 eval，準確率還是不夠才開。thinking tokens 要付費、延遲增加，且與 prefill、temperature 不相容。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "confuse", "q": "Workflow 與 Agent，預設選哪個？", "a": "Workflow。能事先畫出解題步驟就用 workflow：準確、可測、可預測。真的無法預知任務才用 agent。使用者只在乎產品穩不穩。", "courses": ["claude-api", "vertex"]},
+    {"deck": "confuse", "q": "MCP 的 Tools、Resources、Prompts 各由誰控制？", "a": "Tools 由 model 控制（Claude 自己決定何時呼叫）；Resources 由 app 控制（你的程式碼決定何時取用，類似 HTTP GET）；Prompts 由 user 控制（按鈕、slash 指令）。", "courses": ["claude-api", "bedrock", "vertex", "mcp"]},
+    {"deck": "confuse", "q": "Direct resource 與 templated resource 差在哪？", "a": "Direct 是固定 URI，如 docs://documents；templated 的 URI 帶參數，如 docs://documents/{doc_id}，SDK 自動解析成函式引數。", "courses": ["mcp", "bedrock", "vertex"]},
+    {"deck": "confuse", "q": "語意搜尋對「INC-2023-Q4-011」這類精確代號可靠嗎？", "a": "不可靠，它找的是意思相近不是字面相同。用 BM25 詞彙搜尋補洞：罕見詞給高權重，精準命中 ID 與代號，再用 RRF 合併兩路排名。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "confuse", "q": "Hook 的 exit code 1 會不會擋下動作？", "a": "不會！exit 1 是非阻擋錯誤，Claude 照樣執行。要擋就 exit 2：blocking error，stderr 回饋給 Claude 當 context。exit 0 加 JSON 則用 permissionDecision 決定。", "courses": ["claude-code"]},
+    {"deck": "confuse", "q": "Auto mode 與 Don't ask 差在哪？", "a": "Auto：全部接受，但每個動作執行前由另一個 classifier 模型審意圖，適合半放手的長任務。Don't ask：只允許事先核准的工具，名單外直接拒絕而非等待核准，適合無人在場的 CI 與排程。", "courses": ["claude-code"]},
+    {"deck": "confuse", "q": "Auto mode 的 classifier 會擋下把 authentication 改壞的變更嗎？", "a": "不會。classifier 只看「意圖」不看「正確性」，壞掉不等於危險。所以 auto mode 要配跑測試的 Stop hook：一個事前把關意圖，一個收工時把關正確性。", "courses": ["claude-code"]},
+    {"deck": "confuse", "q": "壓縮後想把 context 塞回對話，用 PostCompact 還是 SessionStart？", "a": "SessionStart 搭配 compact matcher。那才是輸出會真正回到對話裡的事件；PostCompact 是最常踩的坑。", "courses": ["claude-code"]},
+    {"deck": "confuse", "q": "CLAUDE.md 用 @import 拆檔，會減少 context 用量嗎？", "a": "不會。imports 只幫你整理，啟動時所有引用的檔案都原地展開全部載入。", "courses": ["claude-code"]},
+    {"deck": "confuse", "q": "「never push to main」該放 CLAUDE.md 還是 hook？", "a": "Hook（PreToolUse）。CLAUDE.md 是請求不是保證，放那裡只是希望 Claude 尊重它；硬規則進 hooks，軟性慣例留 CLAUDE.md。", "courses": ["claude-code"]},
+    {"deck": "confuse", "q": "claude -p（headless）會載入 hooks、skills、CLAUDE.md 嗎？", "a": "不會，全部跳過：hooks、skills、plugins、MCP servers 與 CLAUDE.md 自動載入一概不載。你得到 Claude 加上明確允許的工具，啟動快很多。", "courses": ["claude-code"]},
+    {"deck": "confuse", "q": "託管的 Code Review 會 approve 或 block PR 嗎？會自動修嗎？", "a": "永遠不會 approve 或 block，判斷權留在人類。也沒有託管 autofix：套用修正是本機動作，終端機跑 /code-review --fix。", "courses": ["claude-code"]},
+    {"deck": "confuse", "q": "PreToolUse hook 的 updatedInput 是覆蓋部分欄位還是整個 input？", "a": "整個 input 物件。沒改的欄位也要原樣回傳，否則遺失。典型用法是 redact 而不是 block：偵測到 sk_live_ 就換成占位符，指令照跑。", "courses": ["claude-code"]},
+    {"deck": "confuse", "q": "Plugin 帶的 hooks 會覆蓋你自己的 hooks 嗎？", "a": "不會，是疊加：plugin 的 PreToolUse hook 和你自己的都會觸發。所以先讀再裝，plugin 是以你的權限在你機器上執行的程式碼。", "courses": ["claude-code"]},
+    {"deck": "confuse", "q": "/goal 的 evaluator 能檢查外部狀態嗎？", "a": "不能，它只讀 transcript。完成條件必須從 Claude 的實際輸出就能檢查（如測試結果），不能是外部狀態。", "courses": ["claude-code"]},
+    {"deck": "confuse", "q": "Routine 能 push 到任何 branch 嗎？", "a": "不能。每次執行從 default branch 全新 clone 開始，只能 push 到 claude/ 開頭的 branch（除非逐 repo 放寬）；週期排程最頻繁一小時一次；目前是 research preview。", "courses": ["claude-code"]},
+    {"deck": "confuse", "q": "Projects 與 Skills 的差別？", "a": "口訣：projects store knowledge, skills perform tasks。Project 存知識（what），Skill 存流程（how），兩者可搭配使用。", "courses": ["claude-101"]},
+    {"deck": "confuse", "q": "Word、Excel、PowerPoint、PDF 是 artifact 嗎？", "a": "不是。它們走另一套 file creation 能力，以可下載檔案交付。Artifact 是在對話旁視窗即時渲染的可互動內容。", "courses": ["claude-101"]},
+    {"deck": "confuse", "q": "web search、Research、Enterprise Search 各用在什麼時候？", "a": "快查單一事實用 web search；跨多來源、附引用的深度報告用 Research；答案在公司內部資料時用 Enterprise Search（限 Team / Enterprise）。", "courses": ["claude-101"]},
+    {"deck": "confuse", "q": "Chat 與 Cowork 產出的成品差在哪？", "a": "Chat 的成品是下載連結；Cowork 直接存回你的資料夾。Cowork 適合多步驟、產出真檔案、跨工具、要定時的任務。", "courses": ["claude-101"]},
+    {"deck": "confuse", "q": "Description 的三種與 Discernment 的三種如何對應？", "a": "一一對應：Product（產出長什麼樣 / 產出正不正確）、Process（怎麼做 / 推理有沒有跳步）、Performance（互動中表現什麼行為 / 行為是否恰當）。", "courses": ["ai-fluency"]},
+    {"deck": "confuse", "q": "Automation、Augmentation、Agency 三種協作模式的差別？", "a": "Automation：AI 依你的指令完成特定任務。Augmentation：你和 AI 一起思考一起產出。Agency：事先設定好 AI 的知識與行為，讓它代表你獨立作業。", "courses": ["ai-fluency"]},
+    {"deck": "confuse", "q": "Bedrock 的 inference profile ID 要去哪找？", "a": "Bedrock console 的 Cross-region inference 區，不是模型目錄頁上的 model ID。它會自動把 request 路由到有部署模型的 region。", "courses": ["bedrock"]},
+    {"deck": "confuse", "q": "Bedrock 的 Converse API 與 InvokeModel 差在哪？", "a": "Converse 是統一的 messages 介面，跨模型一致，課程所有對話與 tool use 都用它；InvokeModel 傳各模型自訂的原始 JSON body，課程只在呼叫 Titan embedding 時用到。", "courses": ["bedrock"]},
+    {"deck": "confuse", "q": "Tool use 的後續 request 還要帶 tools 參數嗎？", "a": "要。即使你預期 Claude 不會再呼叫工具，漏掉 schemas 它會看不懂歷史裡的工具引用。", "courses": ["claude-api", "bedrock"]},
+    {"deck": "numbers", "q": "Extended thinking 的 budget 最小是多少？", "a": "1024 tokens，且 max_tokens 必須大於 budget（實務上留餘裕，例如 budget 1024 配 max_tokens 4000）。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "numbers", "q": "Prompt caching 的三個數字：最少內容、最多斷點、處理順序？", "a": "被快取內容合計至少 1024 tokens；最多 4 個 breakpoints；固定順序 tools → system → messages。", "courses": ["claude-api", "vertex"]},
+    {"deck": "numbers", "q": "圖片消耗的 token 大約怎麼算？", "a": "約 寬 × 高 ÷ 750。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "numbers", "q": "單一 request 的圖片上限？", "a": "Anthropic API 與 Vertex：最多 100 張、每張 5MB。Bedrock：最多 20 張、每張 3.75MB、長寬 8000px。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "numbers", "q": "Temperature 三個區間各適合什麼？", "a": "0.0–0.3 事實問答、寫程式、資料萃取、內容審核；0.4–0.7 摘要、教學、解題；0.8–1.0 brainstorming、創意寫作、行銷文案。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "numbers", "q": "運動員餐單例子的 eval 分數怎麼進步？", "a": "初版 2.32 → 清楚直接 3.92 → 加 quality guidelines 7.86。綜合練習光第一招就從 2.8 拉到 9.5。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "numbers", "q": "RRF 公式與常用的 k？", "a": "RRF_score(d) = Σ 1/(k + rank_i(d))，k 通常取 60。只看名次不看原始分數。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "numbers", "q": "Tool description 建議寫幾句？", "a": "3 到 4 句：做什麼、何時用、回傳什麼。", "courses": ["claude-api", "bedrock", "vertex"]},
+    {"deck": "numbers", "q": "Permission modes 有幾種？shift-tab 循環幾種？", "a": "六種：Manual、Accept edits、Plan、Auto、Don't ask、Bypass permissions。shift-tab 只循環日常四種（manual、accept edits、plan、auto）。", "courses": ["claude-code"]},
+    {"deck": "numbers", "q": "Hook 事件總共大約幾個？CLAUDE.md 有幾個存放位置？", "a": "約 30 個 hook 事件。CLAUDE.md 四個位置：Managed policy、User、Project、Local，啟動時全部載入疊加。", "courses": ["claude-code"]},
+    {"deck": "numbers", "q": "Routines 週期排程最頻繁多久一次？", "a": "一小時一次。", "courses": ["claude-code"]},
+    {"deck": "numbers", "q": "Claude 的 context window 多大？", "a": "200K+ tokens（約 500 頁以上文字）；Pro、Max、Team、Enterprise 搭配支援的模型可達 1M。", "courses": ["claude-101"]},
+    {"deck": "numbers", "q": "Project 知識庫逼近上限時會發生什麼？", "a": "自動切換成 RAG，改成搜尋並只取相關部分，容量最多擴大 10 倍。", "courses": ["claude-101"]},
+    {"deck": "numbers", "q": "Artifact 通常在內容超過幾行時自動建立？", "a": "通常超過 15 行、自成一體、你會想編輯或重複使用時。沒有的話直接說 Create this as an artifact。", "courses": ["claude-101"]},
+    {"deck": "numbers", "q": "簡易 evals 要蒐集幾個實例？", "a": "5 到 10 個平常工作的實例，寫成測試 prompt，比較 Claude 的結果與原版。", "courses": ["claude-101", "ai-fluency"]},
+    {"deck": "numbers", "q": "Embedding 向量大概長什麼樣？", "a": "一長串數字，通常約 1024 個，每個介於 -1 到 1 之間，代表文字的語意。", "courses": ["bedrock", "vertex"]}
+  ]
+}
