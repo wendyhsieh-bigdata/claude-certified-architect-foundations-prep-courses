@@ -32,6 +32,7 @@
         case 'quote': return `<div class="quote"><p>${b.html}</p></div>`;
         case 'code': return `<pre><code class="lang-${esc(b.lang || '')}">${esc(b.text)}</code></pre>`;
         case 'hr': return '<hr>';
+        case 'h': return `<h${b.level} id="${esc(b.slug)}" class="gh">${b.html}</h${b.level}>`;
         case 'table': return renderTable(b.headers, b.rows, 'md');
         case 'list': {
           const tag = b.ordered ? 'ol' : 'ul';
@@ -100,6 +101,14 @@
         </div>
       </div>
       ${pathHtml}
+      ${window.STUDY_GUIDE ? (() => { const g = window.STUDY_GUIDE; const gp = (readState()[g.id] || {}); const done = g.pages.filter(p => gp[p.slug]).length; const quizPages = g.pages.filter(p => p.kind === 'quiz'); const qs = store.get('study.guide.quiz', {}); const answered = Object.keys(qs).length;
+        return `<section class="path guide-home"><div class="path-head"><h2>認證考試讀書指南</h2><span class="muted">獨立於上面七門課的內容：翻譯整理自外部的開源指南，涵蓋考試 domain、理論章節與 ${g.question_count} 道模擬試題。</span></div>
+        <div class="steps"><div class="step"><div class="num">✎</div><a class="card course-card" href="#/guide">
+          <div class="title-row"><h3>${g.title_html}</h3>${chip('中文翻譯', 'accent')}${done ? chip(`${done}/${g.pages.length} 頁已讀`, 'ok') : ''}</div>
+          <div class="meta"><span>${g.parts.length} 部 · ${g.pages.length} 頁</span><span>約 ${g.read_minutes} 分鐘</span><span>${g.question_count} 題（${quizPages.map(p => esc(p.title)).join('、')}）</span>${answered ? `<span>已作答 ${answered} 題</span>` : ''}</div>
+          <div class="progress"><span style="width:${g.pages.length ? Math.round(done / g.pages.length * 100) : 0}%"></span></div>
+          <p class="note">出處：${esc(g.source.label)}。專有名詞保留英文，逐章閱讀，試題可點選作答並看解析。</p>
+        </a></div></div></section>`; })() : ''}
       <section class="tools">
         <h2>學習工具</h2>
         <div class="grid cols-3">
@@ -344,16 +353,115 @@
     draw('');
   }
 
+
+  // ------------------------------------------------------------------ views: study guide (separate content)
+  const G = window.STUDY_GUIDE || null;
+  const quizState = () => store.get('study.guide.quiz', {});
+  const guideProgress = () => { const s = readState()[G.id] || {}; const done = G.pages.filter(p => s[p.slug]).length; return { done, total: G.pages.length }; };
+  const quizStats = (page) => { const st = quizState(); let answered = 0, correct = 0; page.questions.forEach(q => { const a = st[page.slug + '|' + q.n]; if (a) { answered++; if (a === q.answer) correct++; } }); return { answered, correct, total: page.questions.length }; };
+
+  function viewGuide(slug, anchor) {
+    if (!G) { app.innerHTML = '<div class="empty">找不到讀書指南的資料，請先執行 build/parse.py。</div>'; return; }
+    setActiveNav('guide');
+    const page = G.pages.find(p => p.slug === slug) || G.pages[0];
+    const idx = G.pages.indexOf(page);
+    const part = G.parts[page.part];
+    const rs = readState()[G.id] || {};
+    const isQuiz = page.kind === 'quiz';
+
+    const nav = `<button class="chip btn guide-toc-btn" id="guide-toc-btn">目錄 · 第 ${idx + 1} / ${G.pages.length} 頁 ▾</button><nav class="topic-nav guide-nav" id="guide-nav">${G.parts.map((pt, pi) => `
+      <div class="part-h">${pt.title_html}</div>
+      ${pt.pages.map(ps => { const pg = G.pages.find(x => x.slug === ps); const active = pg.slug === page.slug;
+        const subs = active && pg.headings && pg.headings.length ? `<div class="subs">${pg.headings.map(h => `<a href="#/guide/${pg.slug}#${h.slug}" class="sub">${esc(h.title)}</a>`).join('')}</div>` : '';
+        return `<a href="#/guide/${pg.slug}" class="${active ? 'active' : ''} ${rs[pg.slug] ? 'done' : ''}"><span class="t">${rs[pg.slug] ? '✓ ' : ''}${esc(pg.title)}</span>${pg.kind === 'quiz' ? `<span class="q">${pg.questions.length} 題</span>` : ''}</a>${subs}`; }).join('')}`).join('')}</nav>`;
+
+    const source = `<div class="source-note">出處：翻譯整理自 <a href="${esc(G.source.url)}" target="_blank" rel="noopener">${esc(G.source.label)}</a>。中文翻譯僅供學習參考，專有名詞保留英文；若與原文有出入，以原文為準。</div>`;
+    const pager = `<div class="pager">
+      ${idx > 0 ? `<a href="#/guide/${G.pages[idx - 1].slug}">← ${esc(G.pages[idx - 1].title)}</a>` : '<span></span>'}
+      ${idx < G.pages.length - 1 ? `<a href="#/guide/${G.pages[idx + 1].slug}">${esc(G.pages[idx + 1].title)} →</a>` : '<span></span>'}
+    </div>`;
+    const readBox = `<label class="readbox guide-read"><input type="checkbox" id="guide-read" ${rs[page.slug] ? 'checked' : ''}> 這一頁已讀</label>`;
+
+    let body;
+    if (isQuiz) {
+      const ui = store.get('study.guide.quiz.ui', { scenario: 'all', showAll: false });
+      body = `<div id="quiz-root"></div>`;
+      app.innerHTML = `<div class="core-layout">${nav}<article>
+        <header class="topic-head"><div>${chip(esc(part.title), 'accent')} ${chip('試題', 'warn')} ${chip(`${page.questions.length} 題`)}</div>
+          <h1>${page.title_html}</h1>${source}</header>
+        ${renderBlocks(page.blocks)}${body}${readBox}${pager}</article></div>`;
+      renderQuiz(page, ui);
+    } else {
+      app.innerHTML = `<div class="core-layout">${nav}<article class="guide-article">
+        <header class="topic-head"><div>${chip(esc(part.title), 'accent')} ${chip(`約 ${page.read_minutes} 分鐘`)} ${chip(`第 ${idx + 1} / ${G.pages.length} 頁`)}</div>
+          <h1>${page.title_html}</h1>${source}</header>
+        ${renderBlocks(page.blocks)}${readBox}${pager}</article></div>`;
+    }
+
+    document.getElementById('guide-toc-btn').addEventListener('click', () => document.getElementById('guide-nav').classList.toggle('open'));
+    document.getElementById('guide-read').addEventListener('change', (e) => {
+      setRead(G.id, page.slug, e.target.checked);
+      const a = app.querySelector(`.guide-nav a[href="#/guide/${page.slug}"]`);
+      if (a) { a.classList.toggle('done', e.target.checked); a.querySelector('.t').textContent = (e.target.checked ? '✓ ' : '') + page.title; }
+    });
+    if (anchor) { const el = document.getElementById(anchor); if (el) el.scrollIntoView({ block: 'start' }); }
+  }
+
+  function renderQuiz(page, ui) {
+    const root = document.getElementById('quiz-root');
+    const st = quizState();
+    const qs = page.questions.filter(q => ui.scenario === 'all' || q.scenario === ui.scenario);
+    const stats = quizStats(page);
+    root.innerHTML = `
+      <div class="toolbar qz-toolbar">
+        <button class="chip btn ${ui.scenario === 'all' ? 'on' : ''}" data-scen="all">全部 ${page.questions.length}</button>
+        ${page.scenarios.map(sc => `<button class="chip btn ${ui.scenario === sc ? 'on' : ''}" data-scen="${esc(sc)}">${esc(sc)} ${page.questions.filter(q => q.scenario === sc).length}</button>`).join('')}
+        <span class="sep"></span>
+        <button class="chip btn ${ui.showAll ? 'on' : ''}" data-toggle="showAll">${ui.showAll ? '隱藏未作答的解析' : '直接顯示全部答案'}</button>
+        <button class="chip btn" data-reset="1">重設作答</button>
+      </div>
+      <p class="muted small">點選一個選項即揭曉答案與解析。已作答 ${stats.answered} / ${stats.total}，答對 ${stats.correct}。作答記錄存在這個瀏覽器裡。</p>
+      ${qs.map(q => {
+        const picked = st[page.slug + '|' + q.n] || '';
+        const reveal = !!picked || ui.showAll;
+        return `<section class="qz ${reveal ? 'revealed' : ''} ${picked ? (picked === q.answer ? 'right' : 'wrong') : ''}" id="q${q.n}" data-n="${q.n}">
+          <div class="qz-head"><span class="qn">第 ${q.n} 題</span>${q.scenario ? chip(esc(q.scenario), 'dev') : ''}${picked ? chip(picked === q.answer ? '答對' : `答錯（你選 ${picked}）`, picked === q.answer ? 'ok' : 'warn') : ''}</div>
+          ${q.situation ? `<p class="sit"><strong>情境：</strong>${q.situation}</p>` : ''}
+          <p class="stem">${q.stem}</p>
+          <div class="opts">${q.options.map(o => `<button class="opt ${reveal && o.correct ? 'correct' : ''} ${picked === o.letter ? 'picked' : ''}" data-letter="${o.letter}" ${reveal ? 'disabled' : ''}><span class="l">${o.letter}</span><span class="txt">${o.html}</span></button>`).join('')}</div>
+          <div class="why"><strong>為什麼選 ${q.answer}：</strong>${q.why}</div>
+        </section>`;
+      }).join('') || '<div class="empty">沒有符合條件的題目。</div>'}`;
+
+    root.querySelector('.qz-toolbar').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.scen) ui.scenario = b.dataset.scen;
+      else if (b.dataset.toggle) ui[b.dataset.toggle] = !ui[b.dataset.toggle];
+      else if (b.dataset.reset) { if (!confirm('要清除這一頁的作答記錄嗎？')) return; const s2 = quizState(); page.questions.forEach(q => delete s2[page.slug + '|' + q.n]); store.set('study.guide.quiz', s2); }
+      store.set('study.guide.quiz.ui', ui);
+      const y = window.scrollY; renderQuiz(page, ui); window.scrollTo(0, y);
+    });
+    root.addEventListener('click', (e) => {
+      const opt = e.target.closest('button.opt'); if (!opt || opt.disabled) return;
+      const sec = opt.closest('.qz'); const n = +sec.dataset.n;
+      const q = page.questions.find(x => x.n === n);
+      const s2 = quizState(); s2[page.slug + '|' + n] = opt.dataset.letter; store.set('study.guide.quiz', s2);
+      const y = window.scrollY; renderQuiz(page, ui); window.scrollTo(0, y);
+      const el = document.getElementById('q' + n); if (el) el.scrollIntoView({ block: 'nearest' });
+    });
+  }
   // ------------------------------------------------------------------ router
   function route() {
     const hash = location.hash || '#/';
-    const [path, anchor] = hash.slice(1).split('#');
+    let raw = hash.slice(1); try { raw = decodeURIComponent(raw); } catch (e) { /* keep as is */ }
+    const [path, anchor] = raw.split('#');
     const parts = path.split('/').filter(Boolean);
     window.scrollTo(0, 0);
     if (parts[0] === 'course' && parts[1]) {
       viewCourse(parts[1]);
       if (anchor) { const el = document.getElementById(anchor); if (el) { const det = el.closest('.unit') || el; if (det.tagName === 'DETAILS') det.open = true; el.scrollIntoView({ block: 'start' }); } }
     } else if (parts[0] === 'core') viewCore(parts[1]);
+    else if (parts[0] === 'guide') viewGuide(parts[1], anchor);
     else if (parts[0] === 'cards') viewCards();
     else if (parts[0] === 'glossary') viewGlossary();
     else viewHome();

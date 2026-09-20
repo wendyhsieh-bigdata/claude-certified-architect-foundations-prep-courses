@@ -2,7 +2,8 @@
 """Parse the seven overview_*.md files into structured data for the study site.
 
 Usage:  python3 build/parse.py
-Output: site/data.js  (assigns window.STUDY_DATA)
+Output: site/data/course-*.js, site/data/meta.js, and site/data/guide.js
+        (guide.js is built from guide_ccaf_zh.md — a separate study guide page)
 
 The Markdown used in the overviews is deliberately limited (headings, paragraphs,
 pipe tables, fenced code, ordered/unordered lists with 2-space nesting,
@@ -104,7 +105,7 @@ def inline(text: str) -> str:
     text = re.sub(r"`([^`]+)`", stash, text)
     text = html.escape(text, quote=False)
     text = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2" target="_blank" rel="noopener">\1</a>', text)
-    text = re.sub(r"(?<![\w*])(https?://[^\s<）]+)", r'<a href="\1" target="_blank" rel="noopener">\1</a>', text)
+    text = re.sub(r"(?<![\w*\"'=])(https?://[^\s<）\"]+)", r'<a href="\1" target="_blank" rel="noopener">\1</a>', text)
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(r"(?<![\w*])\*([^*\n]+?)\*(?![\w*])", r"<em>\1</em>", text)
 
@@ -425,6 +426,209 @@ def extract_glossary(text: str) -> list[dict]:
         out.append({"term": term, "def": inline(definition)})
     return out
 
+
+# --------------------------------------------------------------------------- study guide (separate page)
+
+GUIDE_FILE = "guide_ccaf_zh.md"
+GUIDE_SOURCE = {
+    "label": "paullarionov/claude-certified-architect — guide_en.md",
+    "url": "https://github.com/paullarionov/claude-certified-architect/blob/main/guide_en.md",
+}
+QUIZ_MARK = "<!-- quiz -->"
+Q_TITLE_RE = re.compile(r"^第\s*(\d+)\s*題(?:（情境：(.+?)）)?$")
+
+
+def _strip_prefix(html_text: str, label_re: str) -> str:
+    """Remove a leading <strong>label</strong> from a paragraph's HTML."""
+    return re.sub(r"^\s*<strong>" + label_re + r"</strong>\s*", "", html_text, count=1).strip()
+
+
+def _no_callouts(blocks: list[dict]) -> list[dict]:
+    for b in blocks:
+        if b["type"] == "p":
+            b["callout"] = False
+        elif b["type"] == "list":
+            for it in b["items"]:
+                it["callout"] = False
+                if it.get("children"):
+                    _no_callouts(it["children"])
+    return blocks
+
+
+def parse_guide_page_blocks(lines: list[str], used: set[str]) -> tuple[list[dict], list[dict]]:
+    """Text page: h3/h4 become heading blocks so the page reads top-to-bottom. Returns (blocks, headings)."""
+    blocks: list[dict] = []
+    headings: list[dict] = []
+    buf: list[str] = []
+    in_code = False
+
+    def flush():
+        nonlocal buf
+        if any(x.strip() for x in buf):
+            blocks.extend(_no_callouts(parse_blocks(buf)))
+        buf = []
+
+    for ln in lines:
+        if ln.strip().startswith("```"):
+            in_code = not in_code
+        h = None if in_code else split_heading(ln)
+        if h and h[0] in (3, 4):
+            flush()
+            slug = slugify(h[1], used)
+            level = 2 if h[0] == 3 else 3
+            blocks.append({"type": "h", "level": level, "html": inline(h[1]), "slug": slug})
+            if level == 2:
+                headings.append({"slug": slug, "title": strip_md(h[1])})
+        else:
+            buf.append(ln)
+    flush()
+    return blocks, headings
+
+
+def parse_question(title: str, lines: list[str]) -> dict:
+    m = Q_TITLE_RE.match(strip_md(title))
+    num = int(m.group(1)) if m else 0
+    scenario = (m.group(2) or "").strip() if m else ""
+    blocks = _no_callouts(parse_blocks(lines))
+    situation = ""
+    stem = ""
+    options: list[dict] = []
+    why: list[str] = []
+    seen_list = False
+    for b in blocks:
+        if b["type"] == "list" and not seen_list:
+            seen_list = True
+            for it in b["items"]:
+                raw = it["html"]
+                correct = "【正確】" in raw
+                raw = re.sub(r"\s*<strong>【正確】</strong>\s*", "", raw).strip()
+                lm = re.match(r"^([A-D])\)\s*(.*)$", raw, re.S)
+                letter = lm.group(1) if lm else chr(ord("A") + len(options))
+                text = lm.group(2) if lm else raw
+                options.append({"letter": letter, "html": text, "correct": correct})
+        elif b["type"] == "p":
+            plain = html.unescape(re.sub(r"<[^>]+>", "", b["html"]))
+            if not seen_list and plain.startswith("情境："):
+                situation = _strip_prefix(b["html"], "情境：")
+            elif not seen_list:
+                stem = re.sub(r"^<strong>(.*)</strong>$", r"\1", b["html"].strip())
+            else:
+                why.append(_strip_prefix(b["html"], r"為什麼選\s*[A-D]：?"))
+    answer = next((o["letter"] for o in options if o["correct"]), "")
+    return {
+        "n": num, "scenario": scenario, "situation": situation, "stem": stem,
+        "options": options, "answer": answer, "why": " ".join(why),
+    }
+
+
+def parse_guide() -> dict | None:
+    path = ROOT / GUIDE_FILE
+    if not path.exists():
+        return None
+    lines = path.read_text(encoding="utf-8").splitlines()
+    used: set[str] = set()
+
+    title = ""
+    preamble: list[str] = []
+    parts: list[dict] = []
+    pages: list[dict] = []
+    # raw collection: each page = {"part": idx, "title": str, "lines": [...], "quiz": bool}
+    cur_page = None
+    in_code = False
+    state = "pre"
+    for ln in lines:
+        if ln.strip().startswith("```"):
+            in_code = not in_code
+        h = None if in_code else split_heading(ln)
+        if h and h[0] == 1:
+            if not title:
+                title = h[1]
+                continue
+            parts.append({"title": strip_md(h[1]), "title_html": inline(h[1]), "pages": []})
+            cur_page = None
+            state = "part"
+            continue
+        if h and h[0] == 2 and parts:
+            cur_page = {"part": len(parts) - 1, "title": h[1], "lines": [], "quiz": False}
+            pages.append(cur_page)
+            continue
+        if cur_page is not None:
+            if ln.strip() == QUIZ_MARK:
+                cur_page["quiz"] = True
+            else:
+                cur_page["lines"].append(ln)
+        elif state == "pre":
+            preamble.append(ln)
+
+    def page_slug(pg: dict, n: int) -> str:
+        t = strip_md(pg["title"])
+        m = re.match(r"^第\s*(\d+)\s*章", t)
+        if m:
+            base = f"ch-{m.group(1)}"
+        else:
+            m = re.match(r"^Domain\s*(\d+)", t, re.I)
+            base = f"domain-{m.group(1)}" if m else ("quiz" if pg["quiz"] else f"part{pg['part']}") + f"-{n}"
+        slug, k = base, 2
+        while slug in used:
+            slug = f"{base}-{k}"
+            k += 1
+        used.add(slug)
+        return slug
+
+    out_pages: list[dict] = []
+    counters: dict = {}
+    for pg in pages:
+        key = "quiz" if pg["quiz"] else pg["part"]
+        counters[key] = counters.get(key, 0) + 1
+        slug = page_slug(pg, counters[key])
+        page = {
+            "slug": slug, "title": strip_md(pg["title"]), "title_html": inline(pg["title"]),
+            "part": pg["part"], "kind": "quiz" if pg["quiz"] else "text",
+        }
+        plain_len = len(re.sub(r"\s+", "", strip_md("\n".join(pg["lines"]))))
+        page["read_minutes"] = max(1, round(plain_len / 400))
+        if pg["quiz"]:
+            intro: list[str] = []
+            questions: list[dict] = []
+            cur_q = None
+            qin_code = False
+            for ln in pg["lines"]:
+                if ln.strip().startswith("```"):
+                    qin_code = not qin_code
+                h = None if qin_code else split_heading(ln)
+                if h and h[0] == 3:
+                    cur_q = {"title": h[1], "lines": []}
+                    questions.append(cur_q)
+                elif cur_q is not None:
+                    cur_q["lines"].append(ln)
+                else:
+                    intro.append(ln)
+            page["blocks"] = _no_callouts(parse_blocks(intro))
+            page["questions"] = [parse_question(q["title"], q["lines"]) for q in questions]
+            scen = []
+            for q in page["questions"]:
+                if q["scenario"] and q["scenario"] not in scen:
+                    scen.append(q["scenario"])
+            page["scenarios"] = scen
+            page["headings"] = []
+        else:
+            page["blocks"], page["headings"] = parse_guide_page_blocks(pg["lines"], used)
+        parts[pg["part"]]["pages"].append(slug)
+        out_pages.append(page)
+
+    return {
+        "id": "ccaf-guide",
+        "title": strip_md(title),
+        "title_html": inline(title),
+        "source": GUIDE_SOURCE,
+        "generated_from": GUIDE_FILE,
+        "preamble": _no_callouts(parse_blocks(preamble)),
+        "parts": parts,
+        "pages": out_pages,
+        "question_count": sum(len(p.get("questions", [])) for p in out_pages),
+        "read_minutes": sum(p["read_minutes"] for p in out_pages),
+    }
+
 # --------------------------------------------------------------------------- main
 
 def main() -> None:
@@ -457,6 +661,14 @@ def main() -> None:
     payload = json.dumps(meta, ensure_ascii=False, separators=(",", ":"))
     (out_dir / "meta.js").write_text("window.STUDY_META = " + payload + ";\n", encoding="utf-8")
     total += len(payload)
+
+    # Separate study guide (not merged with the course data)
+    guide = parse_guide()
+    if guide is not None:
+        payload = json.dumps(guide, ensure_ascii=False, separators=(",", ":"))
+        (out_dir / "guide.js").write_text("window.STUDY_GUIDE = " + payload + ";\n", encoding="utf-8")
+        total += len(payload)
+        print(f"guide: {len(guide['pages'])} pages, {guide['question_count']} questions")
 
     for c in courses:
         print(f"{c['id']:<12} units={len(c['units']):>2} subunits={c['unit_count']:>2} "
