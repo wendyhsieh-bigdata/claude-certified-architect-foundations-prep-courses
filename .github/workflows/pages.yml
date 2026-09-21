@@ -7,6 +7,7 @@ on:
       - "site/**"
       - "build/**"
       - "overview_*.md"
+      - "guide_*.md"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

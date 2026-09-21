@@ -1,11 +1,12 @@
 # 課程導讀學習站（原型）
 
 把 repo 根目錄的七份 `overview_*.md` 拆成結構化資料，做成一個純靜態、不依賴任何 CDN 的單頁學習介面。
+另外附一個**獨立的**「考試指南」頁面（`#/guide`），內容來自 `guide_ccaf_zh.md`：Claude Certified Architect — Foundations 認證讀書指南的中文翻譯，含 88 道可作答的試題。它不和七門課的資料混在一起。
 
 ## 怎麼用
 
 ```bash
-# 1. 從 Markdown 重新產生資料（改過任何 overview_*.md 或 build/concepts.json 之後都要跑）
+# 1. 從 Markdown 重新產生資料（改過任何 overview_*.md、guide_ccaf_zh.md 或 build/concepts.json 之後都要跑）
 python3 build/parse.py
 
 # 2. 開站：直接雙擊 site/index.html，或起一個本機伺服器
@@ -26,8 +27,9 @@ https://wendyhsieh-bigdata.github.io/claude-certified-architect-foundations-prep
 |---|---|
 | `build/parse.py` | 解析器。把每份導讀切成「這門課在講什麼 / 先記住的表 / 各單元 / 學完得到什麼」四段，單元再切成區塊（段落、表格、程式碼、清單、引言），標記含「搞混、陷阱、注意」等字眼的段落為提醒，並抽出「**專有名詞**（中文解釋）」寫法的術語。 |
 | `build/concepts.json` | 手工整理的跨課程知識：兩條學習路徑、11 個核心主題（共通要點、三平台差異表、對應到各份導讀的哪個單元）、易搞混卡與數字卡。 |
-| `site/data/*.js` | 由 `parse.py` 產生：每門課一個 `course-<id>.js`，加一個 `meta.js`（術語表、學習路徑、核心主題、卡片）。是唯一的資料來源，不要手改。 |
-| `site/index.html` `site/app.js` `site/style.css` | 前端。hash 路由：`#/` 首頁、`#/course/<id>` 課程閱讀、`#/core/<topic>` 核心合併視圖、`#/cards` 卡片、`#/glossary` 術語表。 |
+| `guide_ccaf_zh.md` | 考試指南的中文翻譯原稿。翻譯整理自 [paullarionov/claude-certified-architect — guide_en.md](https://github.com/paullarionov/claude-certified-architect/blob/main/guide_en.md)，專有名詞保留英文。格式：`#` 一級標題＝部、`##`＝一頁、`###`/`####`＝頁內小節；`##` 之後接一行 `<!-- quiz -->` 的頁面是試題頁，其中每個 `###` 是一題，正確選項結尾標 `**【正確】**`，解析段以 `**為什麼選 X：**` 開頭。 |
+| `site/data/*.js` | 由 `parse.py` 產生：每門課一個 `course-<id>.js`，加一個 `meta.js`（術語表、學習路徑、核心主題、卡片），以及 `guide.js`（考試指南）。是唯一的資料來源，不要手改。 |
+| `site/index.html` `site/app.js` `site/style.css` | 前端。hash 路由：`#/` 首頁、`#/course/<id>` 課程閱讀、`#/core/<topic>` 核心合併視圖、`#/cards` 卡片、`#/glossary` 術語表、`#/guide/<page>` 考試指南。 |
 
 ## 功能
 
@@ -36,8 +38,9 @@ https://wendyhsieh-bigdata.github.io/claude-certified-architect-foundations-prep
 - **核心合併視圖**：Claude API、Amazon Bedrock、Google Cloud 三份課程是同一門課的三個版本。每個主題先看三平台共通核心，再看差異表，原文用分頁切換平台。
 - **卡片**：易搞混卡與數字速記卡，點一下翻面，標記熟或不熟，可篩課程、只看不熟、隨機排序。
 - **術語表**：自動抽出的術語，附出現在哪幾門課，可搜尋。
+- **考試指南**（獨立頁面）：左側依「部」分組的章節目錄，逐頁閱讀，每頁可勾已讀；兩個試題頁共 88 題，點選選項即揭曉答案與解析，可依情境篩選、直接顯示全部答案或重設作答。每頁頂端都註明出處。
 
-已讀進度、卡片標記、平台選擇、深淺色主題都存在瀏覽器的 localStorage，不需後端。
+已讀進度、卡片標記、平台選擇、試題作答記錄、深淺色主題都存在瀏覽器的 localStorage，不需後端。
 
 ## 已知限制
 
